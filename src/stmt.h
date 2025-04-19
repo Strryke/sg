@@ -9,7 +9,9 @@ typedef enum {
     STMT_IF,
     STMT_PRINT,
     STMT_VAR,
-    STMT_BLOCK
+    STMT_BLOCK,
+    STMT_FUNCTION,
+    STMT_RETURN,
 } StmtType;
 
 typedef struct Stmt Stmt;
@@ -44,6 +46,18 @@ typedef struct {
     StmtList* statements;
 } BlockStmt;
 
+typedef struct {
+    Token name;
+    int param_count;
+    Token* params;
+    StmtList* body;
+} FunctionStmt;
+
+typedef struct {
+    Token keyword;
+    Expr* value;
+} ReturnStmt;
+
 struct Stmt {
     StmtType type;
     union {
@@ -52,6 +66,8 @@ struct Stmt {
         VarStmt var;
         BlockStmt block;
         IfStmt ifStmt;
+        FunctionStmt function;
+        ReturnStmt return_stmt;
     } as;
 };
 
@@ -61,6 +77,8 @@ Stmt* newIfStmt(Expr* condition, Stmt* thenBranch, Stmt* elseBranch);
 Stmt* newPrintStmt(Expr* expression);
 Stmt* newVarStmt(Token name, Expr* initializer);
 Stmt* newBlockStmt(StmtList* statements);
+Stmt* newFunctionStmt(Token name, int param_count, Token* params, StmtList* body);
+Stmt* newReturnStmt(Token keyword, Expr* value);
 
 // create a new statement list node
 StmtList* newStmtList(Stmt* stmt, StmtList* next);
