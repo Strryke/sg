@@ -6,6 +6,7 @@
 
 typedef enum {
     EXPR_ASSIGN, // New: Assignment like x = 1
+    EXPR_LOGICAL,
     EXPR_BINARY,
     EXPR_GROUPING,
     EXPR_LITERAL,
@@ -24,6 +25,13 @@ typedef struct {
     Token name; // The variable token (identifier)
     Expr* value; // The expression being assigned
 } AssignExpr;
+
+// Binary: left op right
+typedef struct {
+    Expr* left;
+    Token oper;
+    Expr* right;
+} LogicalExpr;
 
 // Binary: left op right
 typedef struct {
@@ -73,6 +81,7 @@ struct Expr {
     ExprType type;
     union {
         AssignExpr assign; // New
+        LogicalExpr logical;
         BinaryExpr binary;
         CallExpr call;
         GroupingExpr grouping;
@@ -84,6 +93,7 @@ struct Expr {
 
 // --- Constructor Functions ---
 Expr* newAssignExpr(Token name, Expr* value);
+Expr* newLogicalExpr(Expr* left, Token oper, Expr* right);
 Expr* newBinaryExpr(Expr* left, Token oper, Expr* right);
 Expr* newCallExpr(Expr* callee, Token paren, int arg_count, Expr** arguments);
 Expr* newGroupingExpr(Expr* expression);
