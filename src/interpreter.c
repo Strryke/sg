@@ -315,8 +315,6 @@ static Value evaluateExpr(Expr* expr) {
                     return BOOL_VAL(false);
                 case TOKEN_NIL:
                     return NIL_VAL;
-                case EXPR_CALL:
-                    return visitCallExpr(expr);
                 default:
                     runtimeError(NULL,
                                  "Interpreter error: Unknown literal token.");
@@ -478,6 +476,9 @@ static Value evaluateExpr(Expr* expr) {
                 return NIL_VAL;
             }
         }
+        case EXPR_CALL:
+            return visitCallExpr(expr);
+
         default:
             runtimeError(NULL, "Interpreter error: Unknown expression type %d.",
                          expr->type);

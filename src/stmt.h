@@ -73,7 +73,6 @@ struct Stmt {
         WhileStmt whileStmt;
         VarStmt var;
         BlockStmt block;
-        IfStmt ifStmt;
         FunctionStmt function;
         ReturnStmt return_stmt;
     } as;

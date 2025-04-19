@@ -205,29 +205,32 @@ static Stmt* declaration(Parser* parser) {
 
 // function ->  "(" parameters? ")" 
 static Stmt* function(Parser* parser, const char* kind) {
-    Token name = consume(parser, TOKEN_IDENTIFIER, "Expect function name.");
-    if (name.type == TOKEN_ERROR) return NULL;
-    
-    consume(parser, TOKEN_LEFT_PAREN, "Expect '(' after function name.");
-    
+    char message[64];
+    snprintf(message, sizeof(message), "Expect %s name.", kind);
+    Token name = consume(parser, TOKEN_IDENTIFIER, message);
+    if (parser->hadError) return NULL;
+
+    Token leftParen = consume(parser, TOKEN_LEFT_PAREN, "Expect '(' after function name.");
+    if (parser->hadError) return NULL;
+
     // Parse parameters
     Token* parameters = NULL;
     int param_count = 0;
-    
+
     if (!check(parser, TOKEN_RIGHT_PAREN)) {
         do {
             if (param_count >= 255) {
                 error(parser, peek(parser), "Can't have more than 255 parameters.");
-                break;
-            }
-            
-            Token param = consume(parser, TOKEN_IDENTIFIER, "Expect parameter name.");
-            if (param.type == TOKEN_ERROR) {
                 free(parameters);
                 return NULL;
             }
-            
-            // Resize the parameters array
+
+            Token param = consume(parser, TOKEN_IDENTIFIER, "Expect parameter name.");
+            if (parser->hadError) {
+                free(parameters);
+                return NULL;
+            }
+
             Token* new_params = (Token*)realloc(parameters, sizeof(Token) * (param_count + 1));
             if (new_params == NULL) {
                 error(parser, param, "Memory error allocating parameters.");
@@ -235,17 +238,25 @@ static Stmt* function(Parser* parser, const char* kind) {
                 return NULL;
             }
             parameters = new_params;
-            
+
             parameters[param_count] = param;
             param_count++;
         } while (match(parser, TOKEN_COMMA));
     }
-    
-    consume(parser, TOKEN_RIGHT_PAREN, "Expect ')' after parameters.");
-    consume(parser, TOKEN_LEFT_BRACE, "Expect '{' before function body.");
-    
+
+    Token rightParen = consume(parser, TOKEN_RIGHT_PAREN, "Expect ')' after parameters.");
+    if (parser->hadError) {
+        free(parameters);
+        return NULL;
+    }
+
+    // Removed: Token leftBrace = consume(parser, TOKEN_LEFT_BRACE, ...);
     StmtList* body = block(parser);
-    
+    if (parser->hadError || body == NULL) {
+        free(parameters);
+        return NULL;
+    }
+
     return newFunctionStmt(name, param_count, parameters, body);
 }
 
@@ -655,14 +666,18 @@ static Expr* call(Parser* parser) {
 static Expr* finishCall(Parser* parser, Expr* callee) {
     Expr** arguments = NULL;
     int arg_count = 0;
-    
+
     if (!check(parser, TOKEN_RIGHT_PAREN)) {
         do {
             if (arg_count >= 255) {
                 error(parser, peek(parser), "Can't have more than 255 arguments.");
-                break;
+                for (int i = 0; i < arg_count; i++) {
+                    freeExpr(arguments[i]);
+                }
+                free(arguments);
+                return NULL;
             }
-            
+
             Expr* argument = expression(parser);
             if (parser->hadError) {
                 for (int i = 0; i < arg_count; i++) {
@@ -671,7 +686,7 @@ static Expr* finishCall(Parser* parser, Expr* callee) {
                 free(arguments);
                 return NULL;
             }
-            
+
             Expr** new_args = (Expr**)realloc(arguments, sizeof(Expr*) * (arg_count + 1));
             if (new_args == NULL) {
                 error(parser, peek(parser), "Memory error allocating arguments.");
@@ -683,21 +698,21 @@ static Expr* finishCall(Parser* parser, Expr* callee) {
                 return NULL;
             }
             arguments = new_args;
-            
+
             arguments[arg_count] = argument;
             arg_count++;
         } while (match(parser, TOKEN_COMMA));
     }
-    
+
     Token paren = consume(parser, TOKEN_RIGHT_PAREN, "Expect ')' after arguments.");
-    if (paren.type == TOKEN_ERROR) {
+    if (parser->hadError) {
         for (int i = 0; i < arg_count; i++) {
             freeExpr(arguments[i]);
         }
         free(arguments);
         return NULL;
     }
-    
+
     return newCallExpr(callee, paren, arg_count, arguments);
 }
 
