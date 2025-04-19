@@ -1,14 +1,15 @@
 #ifndef sg_object_h
 #define sg_object_h
 
+#include "stmt.h"
 #include <stdbool.h>
 #include <stddef.h>
 
 // Forward declarations
 typedef struct Obj Obj;
-typedef struct Stmt Stmt;
-typedef struct Environment Environment;
 typedef struct Interpreter Interpreter;
+struct Environment;
+typedef struct Environment Environment;
 
 typedef enum {
     VAL_BOOL,
@@ -28,9 +29,9 @@ typedef struct {
 } Value;
 
 typedef enum {
-    OBJ_STRING,
     OBJ_FUNCTION,
     OBJ_NATIVE,
+    OBJ_STRING
 } ObjType;
 
 struct Obj {
@@ -53,8 +54,9 @@ typedef struct {
 typedef struct {
     Obj obj;
     int arity;
-    Value (*function)(struct Interpreter* interpreter, int arg_count, Value* args);
+    Value (*function)(struct Interpreter*, int, Value*);
 } ObjNative;
+
 
 #define IS_BOOL(value) ((value).type == VAL_BOOL)
 #define IS_NIL(value) ((value).type == VAL_NIL)
@@ -97,5 +99,7 @@ bool valuesEqual(Value a, Value b);
 // Function object constructors
 ObjFunction* newFunction(Stmt* declaration, Environment* closure);
 ObjNative* newNative(int arity, Value (*function)(struct Interpreter*, int, Value*));
+
+Obj* allocateObject(size_t size, ObjType type);
 
 #endif

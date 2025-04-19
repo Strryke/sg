@@ -8,8 +8,7 @@
 
 #include "memory.h"
 
-static Obj* allocateObject(size_t size, ObjType type);
-static Obj* allocateObject(size_t size, ObjType type) {
+Obj* allocateObject(size_t size, ObjType type) {
     Obj* object = (Obj*)reallocate(NULL, 0, size);
     if (object == NULL) {
         fprintf(stderr, "Fatal: Memory allocation failed for object!\n");
@@ -116,7 +115,6 @@ ObjFunction* newFunction(Stmt* declaration, Environment* closure) {
 
 ObjNative* newNative(int arity, Value (*function)(struct Interpreter*, int, Value*)) {
     ObjNative* native = (ObjNative*)allocateObject(sizeof(ObjNative), OBJ_NATIVE);
-    if (native == NULL) return NULL;
     native->arity = arity;
     native->function = function;
     return native;

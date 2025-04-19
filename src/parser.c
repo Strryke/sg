@@ -14,7 +14,9 @@ static Expr* comparison(Parser* parser);
 static Expr* term(Parser* parser);
 static Expr* factor(Parser* parser);
 static Expr* unary(Parser* parser);
+static Expr* call(Parser* parser);
 static Expr* primary(Parser* parser);
+static Expr* finishCall(Parser* parser, Expr* callee);
 
 static bool match(Parser* parser, TokenType type);
 static bool check(Parser* parser, TokenType type);
@@ -27,9 +29,11 @@ static void synchronize(Parser* parser);
 static void error(Parser* parser, Token token, const char* message);
 
 static Stmt* declaration(Parser* parser);
+static Stmt* function(Parser* parser, const char* kind);
 static Stmt* statement(Parser* parser);
 static Stmt* ifStatement(Parser* parser);
 static Stmt* printStatement(Parser* parser);
+static Stmt* returnStatement(Parser* parser);
 static Stmt* expressionStatement(Parser* parser);
 static Stmt* varDeclaration(Parser* parser);
 static StmtList* block(Parser* parser); // Returns a list for BlockStmt
@@ -141,7 +145,7 @@ static Token consume(Parser* parser, TokenType type, const char* message) {
     if (check(parser, type)) return advance(parser);
     errorAtCurrent(parser, message);
 
-    // can either return an error token or handle differently?
+    // can either return an error token or handle differently? 
     // For now, return previous potentially? idk
     return peek(parser);
 }
@@ -173,11 +177,12 @@ static void synchronize(Parser* parser) {
 
 // --- Statement Parsing Rules ---
 
-// declaration -> varDecl | statement
+// declaration -> funDecl | varDecl | statement
 static Stmt* declaration(Parser* parser) {
     Stmt* stmt = NULL;
-    if (match(parser, TOKEN_VAR)) {
-        // printf("var declaration\n");
+    if (match(parser, TOKEN_FUN)) {
+        stmt = function(parser, "function");
+    } else if (match(parser, TOKEN_VAR)) {
         stmt = varDeclaration(parser);
     } else {
         stmt = statement(parser);
@@ -186,23 +191,70 @@ static Stmt* declaration(Parser* parser) {
     // If an error occurred during parsing the declaration/statement,
     // enter panic mode and synchronize.
     if (parser->hadError) {
-        printf("error in declaration\n");
         synchronize(parser);
         // Return NULL to signal the error to the main parse loop
-        // we alr handle freeing the list in the parse loop
         return NULL;
     }
 
     return stmt;
 }
 
-// statement -> exprStmt | printStmt | block
+// function ->  "(" parameters? ")" 
+static Stmt* function(Parser* parser, const char* kind) {
+    Token name = consume(parser, TOKEN_IDENTIFIER, "Expect function name.");
+    if (name.type == TOKEN_ERROR) return NULL;
+    
+    consume(parser, TOKEN_LEFT_PAREN, "Expect '(' after function name.");
+    
+    // Parse parameters
+    Token* parameters = NULL;
+    int param_count = 0;
+    
+    if (!check(parser, TOKEN_RIGHT_PAREN)) {
+        do {
+            if (param_count >= 255) {
+                error(parser, peek(parser), "Can't have more than 255 parameters.");
+                break;
+            }
+            
+            Token param = consume(parser, TOKEN_IDENTIFIER, "Expect parameter name.");
+            if (param.type == TOKEN_ERROR) {
+                free(parameters);
+                return NULL;
+            }
+            
+            // Resize the parameters array
+            Token* new_params = (Token*)realloc(parameters, sizeof(Token) * (param_count + 1));
+            if (new_params == NULL) {
+                error(parser, param, "Memory error allocating parameters.");
+                free(parameters);
+                return NULL;
+            }
+            parameters = new_params;
+            
+            parameters[param_count] = param;
+            param_count++;
+        } while (match(parser, TOKEN_COMMA));
+    }
+    
+    consume(parser, TOKEN_RIGHT_PAREN, "Expect ')' after parameters.");
+    consume(parser, TOKEN_LEFT_BRACE, "Expect '{' before function body.");
+    
+    StmtList* body = block(parser);
+    
+    return newFunctionStmt(name, param_count, parameters, body);
+}
+
+// statement -> exprStmt | ifStmt | printStmt | returnStmt | block
 static Stmt* statement(Parser* parser) {
     if (match(parser, TOKEN_IF)) {
         return ifStatement(parser);
     }
     if (match(parser, TOKEN_PRINT)) {
         return printStatement(parser);
+    }
+    if (match(parser, TOKEN_RETURN)) {
+        return returnStatement(parser);
     }
     if (check(parser, TOKEN_LEFT_BRACE)) {
         StmtList* blockStmts = block(parser); // block() handles {} and returns list
@@ -215,6 +267,21 @@ static Stmt* statement(Parser* parser) {
     }
     // Default to an expression statement
     return expressionStatement(parser);
+}
+
+// returnStmt -> "return" expression? ";"
+static Stmt* returnStatement(Parser* parser) {
+    Token keyword = previous(parser);
+    
+    Expr* value = NULL;
+    if (!check(parser, TOKEN_SEMICOLON)) {
+        value = expression(parser);
+        if (parser->hadError) return NULL;
+    }
+    
+    consume(parser, TOKEN_SEMICOLON, "Expect ';' after return value.");
+    
+    return newReturnStmt(keyword, value);
 }
 
 // ifStmt -> "if" "(" expression ")" statement ( "else" statement )?
@@ -322,7 +389,6 @@ static StmtList* block(Parser* parser) {
     }
 
     Token closingBrace = consume(parser, TOKEN_RIGHT_BRACE, "Expect '}' after block.");
-    // (void)closingBrace;
 
     // If we exited the loop due to an error OR failed to consume '}', cleanup & return NULL
     if (parser->hadError) { // Check error flag *after* trying to consume brace
@@ -362,8 +428,8 @@ static Expr* assignment(Parser* parser) {
         if (expr->type == EXPR_VARIABLE) {
             Token name = expr->as.variable.name;
             Expr* assignNode = newAssignExpr(name, value);
+            freeExpr(expr); // Free the variable expression since we're replacing it
             return assignNode;
-
         } else {
             error(parser, equals, "Invalid assignment target.");
             freeExpr(value);
@@ -382,13 +448,13 @@ static Expr* equality(Parser* parser) {
     if (parser->hadError) return NULL;
 
     while (match(parser, TOKEN_BANG_EQUAL) || match(parser, TOKEN_EQUAL_EQUAL)) {
-        Token oper = previous(parser);
+        Token operator = previous(parser);
         Expr* right = comparison(parser);
         if (parser->hadError) {
             freeExpr(expr);
             return NULL;
         }
-        expr = newBinaryExpr(expr, oper, right);
+        expr = newBinaryExpr(expr, operator, right);
     }
     return expr;
 }
@@ -398,14 +464,15 @@ static Expr* comparison(Parser* parser) {
     Expr* expr = term(parser);
     if (parser->hadError) return NULL;
 
-    while (match(parser, TOKEN_GREATER) || match(parser, TOKEN_GREATER_EQUAL) || match(parser, TOKEN_LESS) || match(parser, TOKEN_LESS_EQUAL)) {
-        Token oper = previous(parser);
+    while (match(parser, TOKEN_GREATER) || match(parser, TOKEN_GREATER_EQUAL) ||
+           match(parser, TOKEN_LESS) || match(parser, TOKEN_LESS_EQUAL)) {
+        Token operator = previous(parser);
         Expr* right = term(parser);
         if (parser->hadError) {
             freeExpr(expr);
             return NULL;
         }
-        expr = newBinaryExpr(expr, oper, right);
+        expr = newBinaryExpr(expr, operator, right);
     }
     return expr;
 }
@@ -416,13 +483,13 @@ static Expr* term(Parser* parser) {
     if (parser->hadError) return NULL;
 
     while (match(parser, TOKEN_MINUS) || match(parser, TOKEN_PLUS)) {
-        Token oper = previous(parser);
+        Token operator = previous(parser);
         Expr* right = factor(parser);
         if (parser->hadError) {
             freeExpr(expr);
             return NULL;
         }
-        expr = newBinaryExpr(expr, oper, right);
+        expr = newBinaryExpr(expr, operator, right);
     }
     return expr;
 }
@@ -433,26 +500,92 @@ static Expr* factor(Parser* parser) {
     if (parser->hadError) return NULL;
 
     while (match(parser, TOKEN_SLASH) || match(parser, TOKEN_STAR)) {
-        Token oper = previous(parser);
+        Token operator = previous(parser);
         Expr* right = unary(parser);
         if (parser->hadError) {
             freeExpr(expr);
             return NULL;
         }
-        expr = newBinaryExpr(expr, oper, right);
+        expr = newBinaryExpr(expr, operator, right);
     }
     return expr;
 }
 
-// unary -> ( "!" | "-" ) unary | primary ;
+// unary -> ( "!" | "-" ) unary | call ;
 static Expr* unary(Parser* parser) {
     if (match(parser, TOKEN_BANG) || match(parser, TOKEN_MINUS)) {
-        Token oper = previous(parser);
+        Token operator = previous(parser);
         Expr* right = unary(parser);
         if (parser->hadError) return NULL;
-        return newUnaryExpr(oper, right);
+        return newUnaryExpr(operator, right);
     }
-    return primary(parser);
+    return call(parser);
+}
+
+// call -> primary ( "(" arguments? ")" )* ;
+static Expr* call(Parser* parser) {
+    Expr* expr = primary(parser);
+    if (parser->hadError) return NULL;
+    
+    while (match(parser, TOKEN_LEFT_PAREN)) {
+        expr = finishCall(parser, expr);
+        if (parser->hadError) {
+            freeExpr(expr);
+            return NULL;
+        }
+    }
+    
+    return expr;
+}
+
+// Parse arguments for a function call
+static Expr* finishCall(Parser* parser, Expr* callee) {
+    Expr** arguments = NULL;
+    int arg_count = 0;
+    
+    if (!check(parser, TOKEN_RIGHT_PAREN)) {
+        do {
+            if (arg_count >= 255) {
+                error(parser, peek(parser), "Can't have more than 255 arguments.");
+                break;
+            }
+            
+            Expr* argument = expression(parser);
+            if (parser->hadError) {
+                for (int i = 0; i < arg_count; i++) {
+                    freeExpr(arguments[i]);
+                }
+                free(arguments);
+                return NULL;
+            }
+            
+            Expr** new_args = (Expr**)realloc(arguments, sizeof(Expr*) * (arg_count + 1));
+            if (new_args == NULL) {
+                error(parser, peek(parser), "Memory error allocating arguments.");
+                for (int i = 0; i < arg_count; i++) {
+                    freeExpr(arguments[i]);
+                }
+                free(arguments);
+                freeExpr(argument);
+                return NULL;
+            }
+            arguments = new_args;
+            
+            arguments[arg_count] = argument;
+            arg_count++;
+        } while (match(parser, TOKEN_COMMA));
+    }
+    
+    Token paren = consume(parser, TOKEN_RIGHT_PAREN, "Expect ')' after arguments.");
+    if (paren.type == TOKEN_ERROR) {
+        for (int i = 0; i < arg_count; i++) {
+            freeExpr(arguments[i]);
+        }
+        free(arguments);
+        return NULL;
+    }
+    
+    return newCallExpr(callee, paren, arg_count, arguments);
 }
 
 // primary -> NUMBER | STRING | "true" | "false" | "nil" | IDENTIFIER | "(" expression ")" ;
