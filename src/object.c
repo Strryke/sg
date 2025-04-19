@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "stmt.h"
+#include "environment.h"
 
 #include "memory.h"
 
@@ -45,6 +47,16 @@ void printObject(Value value) {
     switch (OBJ_TYPE(value)) {
         case OBJ_STRING:
             printf("%s", AS_CSTRING(value));
+            break;
+        case OBJ_FUNCTION: {
+            ObjFunction* function = AS_FUNCTION(value);
+            printf("<fn %.*s>", 
+                   function->declaration->as.function.name.length,
+                   function->declaration->as.function.name.start);
+            break;
+        }
+        case OBJ_NATIVE:
+            printf("<native fn>");
             break;
     }
 }
@@ -91,4 +103,21 @@ bool valuesEqual(Value a, Value b) {
         default:
             return false;
     }
+}
+
+ObjFunction* newFunction(Stmt* declaration, Environment* closure) {
+    ObjFunction* function = (ObjFunction*)allocateObject(sizeof(ObjFunction), OBJ_FUNCTION);
+    if (function == NULL) return NULL;
+    function->declaration = declaration;
+    function->closure = closure;
+    function->arity = declaration->as.function.param_count;
+    return function;
+}
+
+ObjNative* newNative(int arity, Value (*function)(struct Interpreter*, int, Value*)) {
+    ObjNative* native = (ObjNative*)allocateObject(sizeof(ObjNative), OBJ_NATIVE);
+    if (native == NULL) return NULL;
+    native->arity = arity;
+    native->function = function;
+    return native;
 }
