@@ -170,10 +170,6 @@ static void executeStmt(Stmt* stmt) {
                 return;
             }
             
-            function->declaration = stmt;
-            function->closure = currentEnvironment;
-            function->arity = stmt->as.function.param_count;
-            
             char* name = malloc(stmt->as.function.name.length + 1);
             if (name == NULL) {
                 runtimeError(&stmt->as.function.name, "Memory error processing function name.");
@@ -186,7 +182,6 @@ static void executeStmt(Stmt* stmt) {
             free(name);
             break;
         }
-        
         case STMT_RETURN: {
             Value value = NIL_VAL;
             if (stmt->as.return_stmt.value != NULL) {
@@ -288,8 +283,6 @@ static Value clockNative(struct Interpreter* interpreter, int arg_count, Value* 
     (void)args;
     return NUMBER_VAL((double)time(NULL));
 }
-
-
 
 static Value evaluateExpr(Expr* expr) {
     if (expr == NULL || runtimeErrorOccurred) return NIL_VAL;

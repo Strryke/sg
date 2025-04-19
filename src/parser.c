@@ -516,7 +516,7 @@ static Expr* assignment(Parser* parser) {
         if (expr->type == EXPR_VARIABLE) {
             Token name = expr->as.variable.name;
             Expr* assignNode = newAssignExpr(name, value);
-            freeExpr(expr); // Free the variable expression since we're replacing it
+            freeExpr(expr); // free the variable expression since we're replacing it
             return assignNode;
         } else {
             error(parser, equals, "Invalid assignment target.");
