@@ -1,0 +1,31 @@
+// array test
+
+// create arrays
+print "creating arrays" lah
+chope arr0 = Array(0) lah
+print arr0 lah // expect: []
+chope arr3 = Array(3) lah
+print arr3 lah // expect: [nil, nil, nil]
+
+// get array length
+print "testing gethowmany" lah
+print gethowmany(arr0) lah // expect: 0
+print gethowmany(arr3) lah // expect: 3
+
+// set and get array elements
+print "testing setarr and getarr" lah
+setarr(arr3, 0, "first") lah
+setarr(arr3, 1, 123) lah
+setarr(arr3, 2, correct) lah
+print arr3 lah // expect: ["first", 123, correct]
+
+print getarr(arr3, 0) lah // expect: first
+print getarr(arr3, 1) lah // expect: 123
+print getarr(arr3, 2) lah // expect: correct
+
+// test using arrays with each other
+print "testing array interactions" lah
+chope arr2 = Array(2) lah
+setarr(arr2, 0, getarr(arr3, 1)) lah
+setarr(arr2, 1, "second") lah
+print arr2 lah // expect: [123, "second"] 

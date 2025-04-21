@@ -31,8 +31,11 @@ static void checkNumberOperands(Token* operatorToken, Value left, Value right);
 static Value callFunction(ObjFunction* function, Value* arguments, int arg_count);
 static Value visitCallExpr(Expr* expr);
 static Value clockNative(struct Interpreter* interpreter, int arg_count, Value* args);
-
-
+static Value arrayNative(struct Interpreter* interpreter, int arg_count, Value* args);
+static Value getarrNative(struct Interpreter* interpreter, int arg_count, Value* args);
+static Value setarrNative(struct Interpreter* interpreter, int arg_count, Value* args);
+static Value gethowmanyNative(struct Interpreter* interpreter, int arg_count, Value* args);
+static Value appendarrNative(struct Interpreter* interpreter, int arg_count, Value* args);
 
 // --- Interpreter Initialization and Cleanup ---
 void initInterpreter() {
@@ -48,6 +51,42 @@ void initInterpreter() {
             clockFn->arity = 0;
             clockFn->function = clockNative;
             environmentDefine(globalEnvironment, "clock", OBJ_VAL(clockFn));
+        }
+
+        // Register array functions
+        ObjNative* arrayFn = newNative(1, arrayNative);
+        if (arrayFn != NULL) {
+            arrayFn->arity = 1;
+            arrayFn->function = arrayNative;
+            environmentDefine(globalEnvironment, "Array", OBJ_VAL(arrayFn));
+        }
+
+        ObjNative* getarrFn = newNative(2, getarrNative);
+        if (getarrFn != NULL) {
+            getarrFn->arity = 2;
+            getarrFn->function = getarrNative;
+            environmentDefine(globalEnvironment, "getarr", OBJ_VAL(getarrFn));
+        }
+
+        ObjNative* setarrFn = newNative(3, setarrNative);
+        if (setarrFn != NULL) {
+            setarrFn->arity = 3;
+            setarrFn->function = setarrNative;
+            environmentDefine(globalEnvironment, "setarr", OBJ_VAL(setarrFn));
+        }
+
+        ObjNative* gethowmanyFn = newNative(1, gethowmanyNative);
+        if (gethowmanyFn != NULL) {
+            gethowmanyFn->arity = 1;
+            gethowmanyFn->function = gethowmanyNative;
+            environmentDefine(globalEnvironment, "gethowmany", OBJ_VAL(gethowmanyFn));
+        }
+
+        ObjNative* appendarrFn = newNative(2, appendarrNative);
+        if (appendarrFn != NULL) {
+            appendarrFn->arity = 2;
+            appendarrFn->function = appendarrNative;
+            environmentDefine(globalEnvironment, "appendarr", OBJ_VAL(appendarrFn));
         }
     }
     currentEnvironment = globalEnvironment;
@@ -214,7 +253,6 @@ static void executeBlock(StmtList* statements, Environment* environment) {
     currentEnvironment = previousEnvironment;
     freeEnvironment(environment);
 }
-
 
 static Value callFunction(ObjFunction* function, Value* arguments, int arg_count) {
     (void)arg_count;
@@ -505,7 +543,7 @@ static Value visitCallExpr(Expr* expr) {
         if (expr->as.call.arg_count != function->arity) {
             char error[100];
             sprintf(error, "Eh hello, suppose to get %d argument(s) but you give %d only leh.",
-                function->arity, expr->as.call.arg_count);
+                    function->arity, expr->as.call.arg_count);
             runtimeError(&expr->as.call.paren, error);
             free(arguments);
             return NIL_VAL;
@@ -514,14 +552,13 @@ static Value visitCallExpr(Expr* expr) {
         Value result = callFunction(function, arguments, expr->as.call.arg_count);
         free(arguments);
         return result;
-    }
-    else if (IS_OBJ(callee) && OBJ_TYPE(callee) == OBJ_NATIVE) {
+    } else if (IS_OBJ(callee) && OBJ_TYPE(callee) == OBJ_NATIVE) {
         ObjNative* native = (ObjNative*)AS_OBJ(callee);
 
         if (expr->as.call.arg_count != native->arity) {
             char error[100];
             sprintf(error, "Eh hello, suppose to get %d argument(s) but you give %d only leh.",
-                   native->arity, expr->as.call.arg_count);
+                    native->arity, expr->as.call.arg_count);
             runtimeError(&expr->as.call.paren, error);
             free(arguments);
             return NIL_VAL;
@@ -530,10 +567,146 @@ static Value visitCallExpr(Expr* expr) {
         Value result = native->function(NULL, expr->as.call.arg_count, arguments);
         free(arguments);
         return result;
-    }
-    else {
+    } else {
         runtimeError(&expr->as.call.paren, "Can only call functions.");
         free(arguments);
         return NIL_VAL;
     }
+}
+
+// Native function to create a new array of a given size
+static Value arrayNative(struct Interpreter* interpreter, int arg_count, Value* args) {
+    if (arg_count != 1) {
+        fprintf(stderr, "Expected 1 argument but got %d.\n", arg_count);
+        return NIL_VAL;
+    }
+
+    if (!IS_NUMBER(args[0])) {
+        fprintf(stderr, "Size must be a number.\n");
+        return NIL_VAL;
+    }
+
+    double size = AS_NUMBER(args[0]);
+    int sizeInt = (int)size;
+
+    if (size < 0 || sizeInt != size) {
+        fprintf(stderr, "Size must be non-negative integer.\n");
+        return NIL_VAL;
+    }
+
+    ObjArray* array = newArray(sizeInt);
+    if (array == NULL) {
+        fprintf(stderr, "Failed to create array.\n");
+        return NIL_VAL;
+    }
+
+    return OBJ_VAL(array);
+}
+
+// Native function to get an element from an array
+static Value getarrNative(struct Interpreter* interpreter, int arg_count, Value* args) {
+    if (arg_count != 2) {
+        fprintf(stderr, "Expected 2 arguments but got %d.\n", arg_count);
+        return NIL_VAL;
+    }
+
+    if (!IS_ARRAY(args[0])) {
+        fprintf(stderr, "First argument must be an array.\n");
+        return NIL_VAL;
+    }
+
+    if (!IS_NUMBER(args[1])) {
+        fprintf(stderr, "Index must be a number.\n");
+        return NIL_VAL;
+    }
+
+    ObjArray* array = AS_ARRAY(args[0]);
+    double index = AS_NUMBER(args[1]);
+    int indexInt = (int)index;
+
+    if (index < 0 || indexInt != index || indexInt >= array->length) {
+        fprintf(stderr, "Index out of bounds.\n");
+        return NIL_VAL;
+    }
+
+    return array->elements[indexInt];
+}
+
+// Native function to set an element in an array
+static Value setarrNative(struct Interpreter* interpreter, int arg_count, Value* args) {
+    if (arg_count != 3) {
+        fprintf(stderr, "Expected 3 arguments but got %d.\n", arg_count);
+        return NIL_VAL;
+    }
+
+    if (!IS_ARRAY(args[0])) {
+        fprintf(stderr, "First argument must be an array.\n");
+        return NIL_VAL;
+    }
+
+    if (!IS_NUMBER(args[1])) {
+        fprintf(stderr, "Index must be a number.\n");
+        return NIL_VAL;
+    }
+
+    ObjArray* array = AS_ARRAY(args[0]);
+    double index = AS_NUMBER(args[1]);
+    int indexInt = (int)index;
+
+    if (index < 0 || indexInt != index || indexInt >= array->length) {
+        fprintf(stderr, "Index out of bounds.\n");
+        return NIL_VAL;
+    }
+
+    array->elements[indexInt] = args[2];
+    return NIL_VAL;
+}
+
+// Native function to get the length of an array
+static Value gethowmanyNative(struct Interpreter* interpreter, int arg_count, Value* args) {
+    if (arg_count != 1) {
+        fprintf(stderr, "Expected 1 argument but got %d.\n", arg_count);
+        return NIL_VAL;
+    }
+
+    if (!IS_ARRAY(args[0])) {
+        fprintf(stderr, "Argument must be an array.\n");
+        return NIL_VAL;
+    }
+
+    ObjArray* array = AS_ARRAY(args[0]);
+    return NUMBER_VAL(array->length);
+}
+
+static Value appendarrNative(struct Interpreter* interpreter, int arg_count, Value* args) {
+    if (arg_count != 2) {
+        fprintf(stderr, "Expected 2 arguments but got %d.\n", arg_count);
+        return NIL_VAL;
+    }
+
+    if (!IS_ARRAY(args[0])) {
+        fprintf(stderr, "First argument must be an array.\n");
+        return NIL_VAL;
+    }
+
+    // array to modify
+    ObjArray* array = AS_ARRAY(args[0]);
+    int oldLength = array->length;
+    int newLength = oldLength + 1;
+
+    // reallocating the elements array to make room for the new element
+    array->elements = (Value*)reallocate(array->elements,
+                                         sizeof(Value) * oldLength,
+                                         sizeof(Value) * newLength);
+
+    if (array->elements == NULL) {
+        fprintf(stderr, "Failed to resize array.\n");
+        return NIL_VAL;
+    }
+
+    // adding the new element at the end
+    array->elements[oldLength] = args[1];
+    array->length = newLength;
+
+    return args[0];
 }

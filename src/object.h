@@ -31,7 +31,8 @@ typedef struct {
 typedef enum {
     OBJ_FUNCTION,
     OBJ_NATIVE,
-    OBJ_STRING
+    OBJ_STRING,
+    OBJ_ARRAY
 } ObjType;
 
 struct Obj {
@@ -57,6 +58,11 @@ typedef struct {
     Value (*function)(struct Interpreter*, int, Value*);
 } ObjNative;
 
+typedef struct {
+    Obj obj;
+    int length;
+    Value* elements;
+} ObjArray;
 
 #define IS_BOOL(value) ((value).type == VAL_BOOL)
 #define IS_NIL(value) ((value).type == VAL_NIL)
@@ -64,12 +70,17 @@ typedef struct {
 #define IS_OBJ(value) ((value).type == VAL_OBJ)
 #define IS_FUNCTION(value) (IS_OBJ(value) && AS_OBJ(value)->type == OBJ_FUNCTION)
 #define IS_NATIVE(value) (IS_OBJ(value) && AS_OBJ(value)->type == OBJ_NATIVE)
+#define IS_STRING(value) (IS_OBJ(value) && OBJ_TYPE(value) == OBJ_STRING)
+#define IS_ARRAY(value) (IS_OBJ(value) && OBJ_TYPE(value) == OBJ_ARRAY)
 
 #define AS_BOOL(value) ((value).as.boolean)
 #define AS_NUMBER(value) ((value).as.number)
 #define AS_OBJ(value) ((value).as.obj)
 #define AS_FUNCTION(value) ((ObjFunction*)AS_OBJ(value))
 #define AS_NATIVE(value) ((ObjNative*)AS_OBJ(value))
+#define AS_STRING(value) ((ObjString*)AS_OBJ(value))
+#define AS_CSTRING(value) (((ObjString*)AS_OBJ(value))->chars)
+#define AS_ARRAY(value) ((ObjArray*)AS_OBJ(value))
 
 #define BOOL_VAL(value) ((Value) { VAL_BOOL, { .boolean = value } })
 #define NIL_VAL ((Value) { VAL_NIL, { .number = 0 } })
@@ -78,12 +89,8 @@ typedef struct {
 
 #define OBJ_TYPE(value) (AS_OBJ(value)->type)
 
-#define IS_STRING(value) (IS_OBJ(value) && OBJ_TYPE(value) == OBJ_STRING)
-
 // we can cast the obj to an ObjString* and then access the chars
 // AS C_STRING returns char* so we can pass it directly to C functions for conv
-#define AS_STRING(value) ((ObjString*)AS_OBJ(value))
-#define AS_CSTRING(value) (((ObjString*)AS_OBJ(value))->chars)
 
 ObjString* copyString(const char* chars, int length);
 
@@ -99,6 +106,7 @@ bool valuesEqual(Value a, Value b);
 // Function object constructors
 ObjFunction* newFunction(Stmt* declaration, Environment* closure);
 ObjNative* newNative(int arity, Value (*function)(struct Interpreter*, int, Value*));
+ObjArray* newArray(int length);
 
 Obj* allocateObject(size_t size, ObjType type);
 
