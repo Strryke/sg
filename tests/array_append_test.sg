@@ -1,0 +1,11 @@
+// array append test
+
+// create an empty array
+chope arr = Array(0) lah
+print arr lah // expect: []
+print gethowmany(arr) lah // expect: 0
+
+chope new = appendarr(arr, "hi") lah
+
+print new lah
+print gethowmany(new) lah // expect: 1

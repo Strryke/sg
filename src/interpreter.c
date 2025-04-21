@@ -35,6 +35,7 @@ static Value arrayNative(struct Interpreter* interpreter, int arg_count, Value* 
 static Value getarrNative(struct Interpreter* interpreter, int arg_count, Value* args);
 static Value setarrNative(struct Interpreter* interpreter, int arg_count, Value* args);
 static Value gethowmanyNative(struct Interpreter* interpreter, int arg_count, Value* args);
+static Value appendarrNative(struct Interpreter* interpreter, int arg_count, Value* args);
 
 // --- Interpreter Initialization and Cleanup ---
 void initInterpreter() {
@@ -79,6 +80,13 @@ void initInterpreter() {
             gethowmanyFn->arity = 1;
             gethowmanyFn->function = gethowmanyNative;
             environmentDefine(globalEnvironment, "gethowmany", OBJ_VAL(gethowmanyFn));
+        }
+
+        ObjNative* appendarrFn = newNative(2, appendarrNative);
+        if (appendarrFn != NULL) {
+            appendarrFn->arity = 2;
+            appendarrFn->function = appendarrNative;
+            environmentDefine(globalEnvironment, "appendarr", OBJ_VAL(appendarrFn));
         }
     }
     currentEnvironment = globalEnvironment;
@@ -668,4 +676,37 @@ static Value gethowmanyNative(struct Interpreter* interpreter, int arg_count, Va
 
     ObjArray* array = AS_ARRAY(args[0]);
     return NUMBER_VAL(array->length);
+}
+
+static Value appendarrNative(struct Interpreter* interpreter, int arg_count, Value* args) {
+    if (arg_count != 2) {
+        fprintf(stderr, "Expected 2 arguments but got %d.\n", arg_count);
+        return NIL_VAL;
+    }
+
+    if (!IS_ARRAY(args[0])) {
+        fprintf(stderr, "First argument must be an array.\n");
+        return NIL_VAL;
+    }
+
+    // array to modify
+    ObjArray* array = AS_ARRAY(args[0]);
+    int oldLength = array->length;
+    int newLength = oldLength + 1;
+
+    // reallocating the elements array to make room for the new element
+    array->elements = (Value*)reallocate(array->elements,
+                                         sizeof(Value) * oldLength,
+                                         sizeof(Value) * newLength);
+
+    if (array->elements == NULL) {
+        fprintf(stderr, "Failed to resize array.\n");
+        return NIL_VAL;
+    }
+
+    // adding the new element at the end
+    array->elements[oldLength] = args[1];
+    array->length = newLength;
+
+    return args[0];
 }
