@@ -1,5 +1,4 @@
-// Tower of Hanoi in SG language with corrected initial state visualization
-// Uses only print statements, no arrays, smallest disk on top
+//  tower of hanoi in Sing
 
 howdo printMove(disk, source, destination) {
   // Clearly state the move
